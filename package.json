@@ -1,0 +1,17 @@
+{
+  "name": "nsfwbot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "source ./.env && node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "s25g5d4",
+  "license": "MIT",
+  "dependencies": {
+    "botkit": "^0.6.4",
+    "file-type": "^7.2.0",
+    "node-fetch": "^1.7.3"
+  }
+}
