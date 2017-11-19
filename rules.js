@@ -81,8 +81,19 @@ const pixivIllustProcessor = async url => {
     return await pixivUgoiraProcessor(url);
   }
 
-  let imgUrl = `https://i.pximg.net/img-original/img/${imgToken[1]}${id}_p0.jpg`;
-  return await download(imgUrl, { headers: { Referer: 'https://pixiv.net' } });
+  let imgUrl = `https://i.pximg.net/img-original/img/${imgToken[1]}${id}_p0.`;
+  let result;
+  try {
+    result = await download(imgUrl + 'jpg', { headers: { Referer: 'https://pixiv.net' } });
+    return result;
+  } catch (e) {}
+
+  try {
+    result = await download(imgUrl + 'png', { headers: { Referer: 'https://pixiv.net' } });
+    return result;
+  } catch (e) {}
+
+  return false;
 }
 
 const generalProcessor = async url => {
