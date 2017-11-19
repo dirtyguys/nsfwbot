@@ -35,71 +35,51 @@ getChannelInfo.channels = {};
 
 const listenAll = [ 'ambient', 'direct_mention', 'mention', 'direct_message' ];
 controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
-  let channel;
-  let user;
-  try {
-    [channel, user] = await Promise.all([getChannelInfo(message.channel).catch(() => {}), getUserInfo(message.user)]);
-  }
-  catch (e) {
-    console.error(e);
+  let links = message.text.match(/<[^>]+/g);
+  if (!links) {
     return;
   }
-  if (!channel) {
-    channel = 'Private channel';
-  } else {
-    channel = `#${channel.name}`;
-  }
-  if (!user) {
-    user = 'anonymous user';
-  } else {
-    user = `@${user.user.name}`;
-  }
 
-  let savedImages = [];
-  let links = message.text.match(/<[^>]+/g);
-  if (links) {
-    links = links.map(e => entities.decode(e.slice(1)));
+  links = links.map(e => entities.decode(e.slice(1)));
 
-    const downloads = links.map(link => {
-      destMap.set(link, `archives/${message.channel}/p${message.ts.replace(/\D/g, '')}`);
-      return match.download(link).catch(err => Promise.resolve(err));
-    });
+  const downloads = links.map(link => {
+    destMap.set(link, `archives/${message.channel}/p${message.ts.replace(/\D/g, '')}`);
+    return match.download(link).catch(err => Promise.resolve(err));
+  });
 
-    const res = await Promise.all(downloads);
-    const logMessages = {
-      fail: [],
-      success: []
-    };
+  const res = await Promise.all(downloads);
+  const logMessages = {
+    fail: [],
+    success: []
+  };
 
-    res.forEach(e => {
-      if (e.message) {
-        // is error
-        console.error(`${message.channel}/${message.ts.replace(/\D/g, '')}`, e.message);
-        logMessages.fail.push(e);
-      }
-      else {
-        console.log(`[${message.channel}][${message.ts.replace(/\D/g, '')}]`, 'image saved,', e.path.replace(/\\/g, '/'));
-        logMessages.success.push(e);
-      }
-    });
-
-    links.forEach(link => destMap.delete(link));
-
-    if (logChannel) {
-      const text = [];
-      const msgLink = url.resolve(domain, `archives/${message.channel}/p${message.ts.replace(/\D/g, '')}`);
-      text.push(msgLink);
-      text.push('image saved,');
-      logMessages.success.map(e => `${e.fromUrl} ${e.path.replace(/\\/g, '/')}`).forEach(e => text.push(e));
-      text.push('');
-      logMessages.fail.map(e => `${e.message}`).forEach(e => text.push(e));
-
-      bot.say({
-        text: text.join('\n'),
-        channel: logChannel
-      });
+  res.forEach(e => {
+    if (e.message) {
+      // is error
+      console.error(`${message.channel}/${message.ts.replace(/\D/g, '')}`, e.message);
+      logMessages.fail.push(e);
     }
+    else {
+      console.log(`[${message.channel}][${message.ts.replace(/\D/g, '')}]`, 'image saved,', e.path.replace(/\\/g, '/'));
+      logMessages.success.push(e);
+    }
+  });
 
+  links.forEach(link => destMap.delete(link));
+
+  if (logChannel) {
+    const text = [];
+    const msgLink = url.resolve(domain, `archives/${message.channel}/p${message.ts.replace(/\D/g, '')}`);
+    text.push(msgLink);
+    text.push('image saved,');
+    logMessages.success.map(e => `${e.fromUrl} ${e.path.replace(/\\/g, '/')}`).forEach(e => text.push(e));
+    text.push('');
+    logMessages.fail.map(e => `${e.message}`).forEach(e => text.push(e));
+
+    bot.say({
+      text: text.join('\n'),
+      channel: logChannel
+    });
   }
 });
 
