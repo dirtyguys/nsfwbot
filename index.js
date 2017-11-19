@@ -1,7 +1,13 @@
 const util = require('util');
+const url = require('url');
 const botkit = require('botkit');
+const entities = require('html-entities').Html5Entities;
+const { match, map: destMap } = require('./rules');
 const controller = botkit.slackbot({ json_file_store: 'slack-data-store' });
-const bot = controller.spawn({ token: process.env.TOKEN });
+const bot = controller.spawn({ token: process.env.NSFWBOT_TOKEN });
+
+const logChannel = process.env.NSFWBOT_LOG_CHANNEL;
+const domain = process.env.NSFWBOT_DOMAIN;
 
 const getUserInfo = (id) => {
   if (!getUserInfo.users[id]) {
@@ -15,20 +21,86 @@ const getUserInfo = (id) => {
 };
 getUserInfo.users = {};
 
-controller.on('direct_message', (bot, message) => {
-  getUserInfo(message.user).then(user => {
-    console.log(user.user.name, message.text);
+const getChannelInfo = (id) => {
+  if (!getChannelInfo.channels[id]) {
+    return util.promisify(bot.api.channels.info)({ channel: id }).then(channel => {
+      getChannelInfo.channels[id] = channel;
+      return Promise.resolve(channel);
+    });
+  } else {
+    return Promise.resolve(getChannelInfo.channels[id]);
+  }
+};
+getChannelInfo.channels = {};
 
-    let links = message.text.match(/<[^>]+/g);
-    if (links) {
-      links = links.map(e => e.slice(1));
-      console.log('got links:', links);
+const listenAll = [ 'ambient', 'direct_mention', 'mention', 'direct_message' ];
+controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
+  let channel;
+  let user;
+  try {
+    [channel, user] = await Promise.all([getChannelInfo(message.channel).catch(() => {}), getUserInfo(message.user)]);
+  }
+  catch (e) {
+    console.error(e);
+    return;
+  }
+  if (!channel) {
+    channel = 'Private channel';
+  } else {
+    channel = `#${channel.name}`;
+  }
+  if (!user) {
+    user = 'anonymous user';
+  } else {
+    user = `@${user.user.name}`;
+  }
 
-      bot.reply(message, `got links: ${links}`);
-    } else {
-      bot.reply(message, 'no link');
+  let savedImages = [];
+  let links = message.text.match(/<[^>]+/g);
+  if (links) {
+    links = links.map(e => entities.decode(e.slice(1)));
+
+    const downloads = links.map(link => {
+      destMap.set(link, `archives/${message.channel}/p${message.ts.replace(/\D/g, '')}`);
+      return match.download(link).catch(err => Promise.resolve(err));
+    });
+
+    const res = await Promise.all(downloads);
+    const logMessages = {
+      fail: [],
+      success: []
+    };
+
+    res.forEach(e => {
+      if (e.message) {
+        // is error
+        console.error(`${message.channel}/${message.ts.replace(/\D/g, '')}`, e.message);
+        logMessages.fail.push(e);
+      }
+      else {
+        console.log(`[${message.channel}][${message.ts.replace(/\D/g, '')}]`, 'image saved,', e.path.replace(/\\/g, '/'));
+        logMessages.success.push(e);
+      }
+    });
+
+    links.forEach(link => destMap.delete(link));
+
+    if (logChannel) {
+      const text = [];
+      const msgLink = url.resolve(domain, `archives/${message.channel}/p${message.ts.replace(/\D/g, '')}`);
+      text.push(msgLink);
+      text.push('image saved,');
+      logMessages.success.map(e => `${e.fromUrl} ${e.path.replace(/\\/g, '/')}`).forEach(e => text.push(e));
+      text.push('');
+      logMessages.fail.map(e => `${e.message}`).forEach(e => text.push(e));
+
+      bot.say({
+        text: text.join('\n'),
+        channel: logChannel
+      });
     }
-  }).catch(console.error);
+
+  }
 });
 
 bot.startRTM();
