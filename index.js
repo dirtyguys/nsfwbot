@@ -4,6 +4,8 @@ const path = require('path');
 const botkit = require('botkit');
 const entities = require('html-entities').Html5Entities;
 const buildMatch = require('./lib/build-match');
+const getUserInfo = require('./lib/get-user-info');
+const getChannelInfo = require('./lib/get-channel-info');
 
 const token = process.env.NSFWBOT_TOKEN;
 const logChannel = process.env.NSFWBOT_LOG_CHANNEL;
@@ -56,13 +58,34 @@ controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
   if (logChannel) {
     const text = [];
     const msgLink = url.resolve(domain, `archives/${message.channel}/p${message.ts.replace(/\D/g, '')}`);
-    text.push(msgLink);
+    let user;
+    let channel;
+    try {
+      user = await getUserInfo(bot, message.user);
+      user = '@' + user.user.name;
+    }
+    catch (e) {
+      user = 'anonymous user';
+    }
+    try {
+      channel = await getChannelInfo(bot, message.channel);
+      channel = '#' + channel.name;
+    }
+    catch (e) {
+      channel = 'Private channel';
+    }
+
+    text.push(`${channel}, ${user}, ${msgLink}`);
     text.push('');
-    text.push('image saved,');
-    logMessages.success.map(e => `${e.fromUrl} ${e.path.replace(/\\/g, '/')}`).forEach(e => text.push(e));
-    text.push('');
-    text.push('error,');
-    logMessages.fail.map(e => `${e.message}`).forEach(e => text.push(e));
+    if (logMessages.success.length > 0) {
+      text.push('image saved,');
+      logMessages.success.map(e => `${e.fromUrl} ${e.path.replace(/\\/g, '/')}`).forEach(e => text.push(e));
+    }
+    if (logMessages.fail.length > 0) {
+      text.push('');
+      text.push('error,');
+      logMessages.fail.map(e => `${e.message}`).forEach(e => text.push(e));
+    }
 
     bot.say({
       text: text.join('\n'),
