@@ -60,7 +60,7 @@ class MatchDownload {
 
     const { filename, writeOptions } = data;
     if (util.isBuffer(data.data)) {
-      data = data;
+      data = data.data;
     }
 
     if (!util.isBuffer(data) && !util.isString(data)) {
