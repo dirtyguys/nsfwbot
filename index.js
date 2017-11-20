@@ -69,7 +69,7 @@ controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
     }
     try {
       channel = await getChannelInfo(bot, message.channel);
-      channel = '#' + channel.name;
+      channel = '#' + channel.channel.name;
     }
     catch (e) {
       channel = 'Private channel';
