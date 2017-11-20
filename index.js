@@ -1,37 +1,23 @@
 const util = require('util');
 const url = require('url');
+const path = require('path');
 const botkit = require('botkit');
 const entities = require('html-entities').Html5Entities;
-const { match, map: destMap } = require('./rules');
-const controller = botkit.slackbot({ json_file_store: 'slack-data-store' });
-const bot = controller.spawn({ token: process.env.NSFWBOT_TOKEN });
+const buildMatch = require('./lib/build-match');
 
+const token = process.env.NSFWBOT_TOKEN;
 const logChannel = process.env.NSFWBOT_LOG_CHANNEL;
 const domain = process.env.NSFWBOT_DOMAIN;
+const archiveRoot = process.env.NSFWBOT_ARCHIVE_ROOT || 'archives';
 
-const getUserInfo = (id) => {
-  if (!getUserInfo.users[id]) {
-    return util.promisify(bot.api.users.info)({ user: id }).then(user => {
-      getUserInfo.users[id] = user;
-      return Promise.resolve(user);
-    });
-  } else {
-    return Promise.resolve(getUserInfo.users[id]);
-  }
-};
-getUserInfo.users = {};
+if (typeof token !== 'string' || token === '') {
+  throw new Error('No token found. Please add slack bot token to env NSFWBOT_TOKEN');
+}
 
-const getChannelInfo = (id) => {
-  if (!getChannelInfo.channels[id]) {
-    return util.promisify(bot.api.channels.info)({ channel: id }).then(channel => {
-      getChannelInfo.channels[id] = channel;
-      return Promise.resolve(channel);
-    });
-  } else {
-    return Promise.resolve(getChannelInfo.channels[id]);
-  }
-};
-getChannelInfo.channels = {};
+const destMap = new Map();
+const match = buildMatch(url => path.join(archiveRoot, destMap.get(url) || ''));
+const controller = botkit.slackbot({ json_file_store: 'slack-data-store' });
+const bot = controller.spawn({ token });
 
 const listenAll = [ 'ambient', 'direct_mention', 'mention', 'direct_message' ];
 controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
@@ -43,7 +29,7 @@ controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
   links = links.map(e => entities.decode(e.slice(1)));
 
   const downloads = links.map(link => {
-    destMap.set(link, `archives/${message.channel}/p${message.ts.replace(/\D/g, '')}`);
+    destMap.set(link, `${message.channel}/p${message.ts.replace(/\D/g, '')}`);
     return match.download(link).catch(err => Promise.resolve(err));
   });
 
@@ -56,7 +42,7 @@ controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
   res.forEach(e => {
     if (e.message) {
       // is error
-      console.error(`${message.channel}/${message.ts.replace(/\D/g, '')}`, e.message);
+      console.error(`[${message.channel}][${message.ts.replace(/\D/g, '')}]`, e.message);
       logMessages.fail.push(e);
     }
     else {
@@ -71,9 +57,11 @@ controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
     const text = [];
     const msgLink = url.resolve(domain, `archives/${message.channel}/p${message.ts.replace(/\D/g, '')}`);
     text.push(msgLink);
+    text.push('');
     text.push('image saved,');
     logMessages.success.map(e => `${e.fromUrl} ${e.path.replace(/\\/g, '/')}`).forEach(e => text.push(e));
     text.push('');
+    text.push('error,');
     logMessages.fail.map(e => `${e.message}`).forEach(e => text.push(e));
 
     bot.say({
