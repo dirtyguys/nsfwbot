@@ -95,3 +95,7 @@ controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
 });
 
 bot.startRTM();
+controller.on('rtm_close', (bot, err) => {
+  console.error('process die');
+  process.exit(-1);
+});
