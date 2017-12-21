@@ -21,40 +21,7 @@ const match = buildMatch(url => path.join(archiveRoot, destMap.get(url) || ''));
 const controller = botkit.slackbot({ json_file_store: 'slack-data-store' });
 const bot = controller.spawn({ token });
 
-const listenAll = [ 'ambient', 'direct_mention', 'mention', 'direct_message' ];
-controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
-  let links = message.text.match(/<[^>]+/g);
-  if (!links) {
-    return;
-  }
-
-  links = links.map(e => entities.decode(e.slice(1)));
-
-  const downloads = links.map(link => {
-    destMap.set(link, `${message.channel}/p${message.ts.replace(/\D/g, '')}`);
-    return match.download(link).catch(err => Promise.resolve(err));
-  });
-
-  const res = await Promise.all(downloads);
-  const logMessages = {
-    fail: [],
-    success: []
-  };
-
-  res.forEach(e => {
-    if (e.message) {
-      // is error
-      console.error(`[${message.channel}][${message.ts.replace(/\D/g, '')}]`, e.message);
-      logMessages.fail.push(e);
-    }
-    else {
-      console.log(`[${message.channel}][${message.ts.replace(/\D/g, '')}]`, 'image saved,', e.path.replace(/\\/g, '/'));
-      logMessages.success.push(e);
-    }
-  });
-
-  links.forEach(link => destMap.delete(link));
-
+const logMessage = async (bot, message, dlResult) => {
   if (logChannel) {
     const text = [];
     const msgLink = url.resolve(domain, `archives/${message.channel}/p${message.ts.replace(/\D/g, '')}`);
@@ -77,14 +44,14 @@ controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
 
     text.push(`${channel}, ${user}, ${msgLink}`);
     text.push('');
-    if (logMessages.success.length > 0) {
+    if (dlResult.success.length > 0) {
       text.push('image saved,');
-      logMessages.success.map(e => `${e.fromUrl} ${e.path.replace(/\\/g, '/')}`).forEach(e => text.push(e));
+      dlResult.success.map(e => `${e.fromUrl} ${e.path.replace(/\\/g, '/')}`).forEach(e => text.push(e));
     }
-    if (logMessages.fail.length > 0) {
+    if (dlResult.fail.length > 0) {
       text.push('');
       text.push('error,');
-      logMessages.fail.map(e => `${e.message}`).forEach(e => text.push(e));
+      dlResult.fail.map(e => `${e.message}`).forEach(e => text.push(e));
     }
 
     bot.say({
@@ -92,6 +59,61 @@ controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
       channel: logChannel
     });
   }
+};
+
+const listenAll = [ 'ambient', 'direct_mention', 'mention', 'direct_message' ];
+controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
+  let links = message.text.match(/<[^>]+/g);
+  if (!links) {
+    return;
+  }
+
+  links = links.map(e => entities.decode(e.slice(1)));
+
+  const downloads = links.map(link => {
+    destMap.set(link, `${message.channel}/p${message.ts.replace(/\D/g, '')}`);
+    return match.download(link).catch(err => Promise.resolve(err));
+  });
+
+  const res = await Promise.all(downloads);
+  const dlResult = {
+    fail: [],
+    success: []
+  };
+
+  res.forEach(e => {
+    if (e.message) {
+      // is error
+      console.error(`[${message.channel}][${message.ts.replace(/\D/g, '')}]`, e.message);
+      dlResult.fail.push(e);
+    }
+    else {
+      console.log(`[${message.channel}][${message.ts.replace(/\D/g, '')}]`, 'image saved,', e.path.replace(/\\/g, '/'));
+      dlResult.success.push(e);
+    }
+  });
+
+  links.forEach(link => destMap.delete(link));
+
+  logMessage(bot, message, dlResult).catch(err => { console.error(err); });
+});
+
+controller.on('file_share', (bot, message) => {
+  const link = message.file.url_private_download;
+  destMap.set(link, `${message.channel}/p${message.ts.replace(/\D/g, '')}`);
+
+  match.download(link)
+    .then(res => {
+      console.log(`[${message.channel}][${message.ts.replace(/\D/g, '')}]`, 'image saved,', res.path.replace(/\\/g, '/'));
+      logMessage(bot, message, { success: [res], fail: [] });
+    })
+    .catch(err => {
+      console.error(`[${message.channel}][${message.ts.replace(/\D/g, '')}]`, err.message);
+      logMessage(bot, message, { success: [], fail: [err] });
+    })
+    .catch(err => {
+      console.error(err);
+    });
 });
 
 bot.startRTM();
