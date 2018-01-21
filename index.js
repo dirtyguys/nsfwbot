@@ -11,7 +11,7 @@ const token = process.env.NSFWBOT_TOKEN;
 const logChannel = process.env.NSFWBOT_LOG_CHANNEL;
 const domain = process.env.NSFWBOT_DOMAIN;
 const archiveRoot = process.env.NSFWBOT_ARCHIVE_ROOT || 'archives';
-const publicUrl = process.env.NSFWBOT_PUBLIC_URL;
+const publicUrl = process.env.NSFWBOT_PUBLIC_URL || '';
 
 if (typeof token !== 'string' || token === '') {
   throw new Error('No token found. Please add slack bot token to env NSFWBOT_TOKEN');
@@ -51,8 +51,13 @@ const logMessage = async (bot, message, dlResult) => {
         .map(e => {
           const originalUrl = e.fromUrl;
           const relativePath = path.relative(archiveRoot, e.path);
-          const publicFileUrl = url.resolve(publicUrl, relativePath);
-          return originalUrl + ' ' + publicFileUrl;
+
+          if (publicUrl) {
+            const publicFileUrl = url.resolve(publicUrl, relativePath);
+            return originalUrl + ' ' + publicFileUrl;
+          }
+
+          return originalUrl + ' ' + relativePath;
         })
         .forEach(e => text.push(e));
 
