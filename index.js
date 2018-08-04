@@ -12,9 +12,14 @@ const logChannel = process.env.NSFWBOT_LOG_CHANNEL;
 const domain = process.env.NSFWBOT_DOMAIN;
 const archiveRoot = process.env.NSFWBOT_ARCHIVE_ROOT || 'archives';
 const publicUrl = process.env.NSFWBOT_PUBLIC_URL || '';
+const connectionTimeout = process.env.NSFWBOT_CONNECTION_TIMEOUT || 10;
 
 if (typeof token !== 'string' || token === '') {
   throw new Error('No token found. Please add slack bot token to env NSFWBOT_TOKEN');
+}
+
+if (isNaN(parseInt(connectionTimeout, 10))) {
+  throw new Error('Bad connection timeout value');
 }
 
 const destMap = new Map();
@@ -131,7 +136,15 @@ controller.on('file_share', (bot, message) => {
 });
 
 bot.startRTM();
+
+const dieAfter = setTimeout(() => {
+  throw new Error('Connect to slack timed out.');
+}, connectionTimeout * 1000);
+
+controller.on('rtm_open', () => {
+  clearTimeout(dieAfter);
+});
+
 controller.on('rtm_close', (bot, err) => {
-  console.error('process die');
-  process.exit(-1);
+  throw new Error('Connection closed unexpectedly');
 });
