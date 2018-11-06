@@ -6,6 +6,7 @@ const entities = require('html-entities').Html5Entities;
 const buildMatch = require('./lib/build-match');
 const getUserInfo = require('./lib/get-user-info');
 const getChannelInfo = require('./lib/get-channel-info');
+const ping = require('./lib/ping');
 
 const token = process.env.NSFWBOT_TOKEN;
 const logChannel = process.env.NSFWBOT_LOG_CHANNEL;
@@ -116,6 +117,8 @@ controller.hears(/<[^>]+/, listenAll, async (bot, message) => {
 
   logMessage(bot, message, dlResult).catch(err => { console.error(err); });
 });
+
+ping(controller, listenAll, [ logChannel ]);
 
 controller.on('file_share', (bot, message) => {
   const link = message.file.url_private_download;
